@@ -27,7 +27,7 @@ const PhoneNumberAuth = () => {
   const sendVerificationCode = () => {
     const appVerifier = window.recaptchaVerifier;
 
-    const phoneNumber = '+923140328646'; // Fixed phone number
+    const phoneNumber = '+923160010801'; // Fixed phone number
 
     signInWithPhoneNumber(auth, phoneNumber, appVerifier)
       .then((confirmationResult) => {
