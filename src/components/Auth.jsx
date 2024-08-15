@@ -1,70 +1,74 @@
-'use client'
-import React, { useState } from 'react';
+'use client';
+import React, { useState, useEffect } from 'react';
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from '@/app/db/firebase';
 
 const PhoneNumberAuth = () => {
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [verificationId, setVerificationId] = useState(null);
-  const [code, setCode] = useState('');
   const [showVerificationInput, setShowVerificationInput] = useState(false);
-
-  // Initialize reCAPTCHA verifier
-  const initializeRecaptcha = () => {
-    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
-      'size': 'invisible',
-      'callback': (response) => {
-        // reCAPTCHA solved, proceed with phone sign-in
-        sendVerificationCode();
-      },
-      'expired-callback': () => {
-        // Response expired, ask user to solve reCAPTCHA again
-      }
-    }, auth);
-  };
+  const [code, setCode] = useState('');
+  
+  // Initialize reCAPTCHA verifier only once
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
+        size: 'invisible', // or 'normal' for visible reCAPTCHA
+        callback: () => {
+          // reCAPTCHA solved, proceed with phone sign-in
+          sendVerificationCode();
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired. Please solve it again.');
+        }
+      }, auth);
+    }
+  }, []);
 
   // Send verification code to phone number
   const sendVerificationCode = () => {
-    initializeRecaptcha();
-
     const appVerifier = window.recaptchaVerifier;
+
+    const phoneNumber = '+923140328646'; // Fixed phone number
+
     signInWithPhoneNumber(auth, phoneNumber, appVerifier)
       .then((confirmationResult) => {
-        // SMS sent, save the confirmation result
-        setVerificationId(confirmationResult.verificationId);
+        console.log('SMS sent successfully.');
         setShowVerificationInput(true);
+        window.confirmationResult = confirmationResult; // Store confirmation result for code verification
       })
       .catch((error) => {
         console.error("Error during sign-in:", error);
+        if (error.code === 'auth/too-many-requests') {
+          alert('Too many requests. Please try again later.');
+        } else if (error.code === 'auth/captcha-check-failed') {
+          alert('reCAPTCHA verification failed. Please try again.');
+        }
       });
   };
 
   // Verify the code entered by the user
   const verifyCode = () => {
-    const credential = auth.PhoneAuthProvider.credential(verificationId, code);
-    auth.signInWithCredential(credential)
-      .then((result) => {
-        console.log('User signed in successfully:', result.user);
-      })
-      .catch((error) => {
-        console.error("Error verifying code:", error);
-      });
+    const confirmationResult = window.confirmationResult;
+
+    if (confirmationResult) {
+      confirmationResult.confirm(code)
+        .then((result) => {
+          console.log('User signed in successfully:', result.user);
+        })
+        .catch((error) => {
+          console.error("Error verifying code:", error);
+        });
+    } else {
+      console.error("No confirmation result found.");
+    }
   };
 
   return (
     <div>
       <div id="recaptcha-container"></div>
-      {!showVerificationInput ? (
-        <div>
-          <input
-            type="text"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            placeholder="Enter phone number"
-          />
-          <button onClick={sendVerificationCode}>Send Verification Code</button>
-        </div>
-      ) : (
+      <button onClick={sendVerificationCode}>
+        Send Verification Code
+      </button>
+      {showVerificationInput && (
         <div>
           <input
             type="text"
