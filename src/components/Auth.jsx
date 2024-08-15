@@ -1,104 +1,82 @@
 'use client'
-
-import React, { useRef, useState } from 'react';
-import Swal from 'sweetalert2';
-import { RecaptchaVerifier } from 'firebase/auth';
+import React, { useState } from 'react';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from '@/app/db/firebase';
 
-const Auth = () => {
-  console.log(auth.authStateSubscription.auth);
-  
+const PhoneNumberAuth = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [verification, setverification] = useState('');
+  const [verificationId, setVerificationId] = useState(null);
+  const [code, setCode] = useState('');
+  const [showVerificationInput, setShowVerificationInput] = useState(false);
 
+  // Initialize reCAPTCHA verifier
+  const initializeRecaptcha = () => {
+    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
+      'size': 'invisible',
+      'callback': (response) => {
+        // reCAPTCHA solved, proceed with phone sign-in
+        sendVerificationCode();
+      },
+      'expired-callback': () => {
+        // Response expired, ask user to solve reCAPTCHA again
+      }
+    }, auth);
+  };
 
-  const recapcha = useRef(null)
+  // Send verification code to phone number
+  const sendVerificationCode = () => {
+    initializeRecaptcha();
 
-  const handleSendOTP = () => {
-
-    if (recapcha.current) {
-recapcha.current.innerHTML = `<div id="recaptcha-container"></>`
-    }
-    const verify = new RecaptchaVerifier('recaptcha-container', {
-      size: 'invisible',
-    })
-    auth.auth().signInWithPhoneNumber(phoneNumber, verify)
-      .then(result => {
-setverification(result)
-      }).catch(error => {
-console.error('ssdsjd'+ error);
-
+    const appVerifier = window.recaptchaVerifier;
+    signInWithPhoneNumber(auth, phoneNumber, appVerifier)
+      .then((confirmationResult) => {
+        // SMS sent, save the confirmation result
+        setVerificationId(confirmationResult.verificationId);
+        setShowVerificationInput(true);
       })
-    if (!phoneNumber) {
-      Swal.fire({
-        title: 'Error!',
-        text: 'Please enter your phone number.',
-        icon: 'error',
+      .catch((error) => {
+        console.error("Error during sign-in:", error);
       });
-      return;
-    }
+  };
 
-    // Here you would send the OTP request to your backend.
-    // This example just shows a success message.
-    Swal.fire({
-      title: 'OTP Sent!',
-      text: 'An OTP has been sent to your phone number.',
-      icon: 'success',
-    });
-
-    // Reset the phone number input
-    setPhoneNumber('');
+  // Verify the code entered by the user
+  const verifyCode = () => {
+    const credential = auth.PhoneAuthProvider.credential(verificationId, code);
+    auth.signInWithCredential(credential)
+      .then((result) => {
+        console.log('User signed in successfully:', result.user);
+      })
+      .catch((error) => {
+        console.error("Error verifying code:", error);
+      });
   };
 
   return (
-    <div style={styles.container}>
-      <div ref={recapcha}></div>
-      <h2 style={styles.title}>Enter Your Phone Number</h2>
-      <input
-        type="text"
-        placeholder="Phone Number"
-        value={phoneNumber}
-        onChange={(e) => setPhoneNumber(e.target.value)}
-        style={styles.input}
-      />
-      <button onClick={handleSendOTP} style={styles.button}>
-        Send OTP
-      </button>
+    <div>
+      <div id="recaptcha-container"></div>
+      {!showVerificationInput ? (
+        <div>
+          <input
+            type="text"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="Enter phone number"
+          />
+          <button onClick={sendVerificationCode}>Send Verification Code</button>
+        </div>
+      ) : (
+        <div>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter verification code"
+          />
+          <button onClick={verifyCode}>Verify Code</button>
+        </div>
+      )}
     </div>
   );
 };
 
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100vh',
-    backgroundColor: '#f4f4f4',
-    padding: '20px',
-  },
-  title: {
-    marginBottom: '20px',
-    fontSize: '24px',
-    color: '#333',
-  },
-  input: {
-    padding: '10px',
-    marginBottom: '20px',
-    width: '250px',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-  },
-  button: {
-    padding: '10px 20px',
-    backgroundColor: '#3085d6',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-  },
-};
-
-export default Auth;
+export default PhoneNumberAuth;
