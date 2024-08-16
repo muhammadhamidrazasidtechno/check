@@ -1,86 +1,90 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import React, { useState } from 'react'
 import { auth } from '@/app/db/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 
-const PhoneNumberAuth = () => {
-  const [showVerificationInput, setShowVerificationInput] = useState(false);
-  const [code, setCode] = useState('');
-  
-  // Initialize reCAPTCHA verifier only once
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
-        size: 'invisible', // or 'normal' for visible reCAPTCHA
-        callback: () => {
-          // reCAPTCHA solved, proceed with phone sign-in
-          sendVerificationCode();
-        },
-        'expired-callback': () => {
-          console.log('reCAPTCHA expired. Please solve it again.');
-        }
-      }, auth);
-    }
-  }, []);
+ const Auth = () => {
 
-  // Send verification code to phone number
-  const sendVerificationCode = () => {
-    const appVerifier = window.recaptchaVerifier;
+  const [phone, setPhone] = useState('+92');
+  const [hasFilled, setHasFilled] = useState(false);
+  const [otp, setOtp] = useState('');
 
-    const phoneNumber = '+923160010801'; // Fixed phone number
+  const generateRecaptcha = () => {
+    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha', {
+      'size': 'invisible',
+      'callback': (response) => {
+        // reCAPTCHA solved, allow signInWithPhoneNumber.
+        // ...
+      }
+    }, auth);
+  }
 
-    signInWithPhoneNumber(auth, phoneNumber, appVerifier)
+  const handleSend = (event) => {
+    event.preventDefault();
+    setHasFilled(true);
+    generateRecaptcha();
+    let appVerifier = window.recaptchaVerifier;
+    signInWithPhoneNumber(auth, phone, appVerifier)
       .then((confirmationResult) => {
-        console.log('SMS sent successfully.');
-        setShowVerificationInput(true);
-        window.confirmationResult = confirmationResult; // Store confirmation result for code verification
-      })
-      .catch((error) => {
-        console.error("Error during sign-in:", error);
-        if (error.code === 'auth/too-many-requests') {
-          alert('Too many requests. Please try again later.');
-        } else if (error.code === 'auth/captcha-check-failed') {
-          alert('reCAPTCHA verification failed. Please try again.');
-        }
+        // SMS sent. Prompt user to type the code from the message, then sign the
+        // user in with confirmationResult.confirm(code).
+        window.confirmationResult = confirmationResult;
+      }).catch((error) => {
+        // Error; SMS not sent
+        console.log(error);
       });
-  };
+  }
+  
+  const verifyOtp = (event) => {
+    let otp = event.target.value;
+    setOtp(otp);
 
-  // Verify the code entered by the user
-  const verifyCode = () => {
-    const confirmationResult = window.confirmationResult;
-
-    if (confirmationResult) {
-      confirmationResult.confirm(code)
-        .then((result) => {
-          console.log('User signed in successfully:', result.user);
-        })
-        .catch((error) => {
-          console.error("Error verifying code:", error);
-        });
-    } else {
-      console.error("No confirmation result found.");
+    if (otp.length === 6) {
+      // verifu otp
+      let confirmationResult = window.confirmationResult;
+      confirmationResult.confirm(otp).then((result) => {
+        // User signed in successfully.
+        let user = result.user;
+        console.log(user);
+        alert('User signed in successfully');
+        // ...
+      }).catch((error) => {
+        // User couldn't sign in (bad verification code?)
+        // ...
+        alert('User couldn\'t sign in (bad verification code?)');
+      });
     }
-  };
+  }
 
-  return (
-    <div>
-      <div id="recaptcha-container"></div>
-      <button onClick={sendVerificationCode}>
-        Send Verification Code
-      </button>
-      {showVerificationInput && (
-        <div>
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Enter verification code"
-          />
-          <button onClick={verifyCode}>Verify Code</button>
-        </div>
-      )}
-    </div>
-  );
-};
+  if(!hasFilled){
+    return (
+      <div className='app__container'>
+        <Card sx={{ width: '300px'}}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column'}}>
+            <Typography sx={{ padding: '20px'}} variant='h5' component='div'>Enter your phone number</Typography>
+            <form onSubmit={handleSend}>
+              <TextField sx={{ width: '240px'}} variant='outlined' autoComplete='off' label='Phone Number' value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <Button type='submit' variant='contained' sx={{ width: '240px', marginTop: '20px'}}>Send Code</Button>
+            </form>
+          </CardContent>
+        </Card>
+        <div id="recaptcha"></div>
+      </div>
+    ) 
+  } else {
+    return (
+      <div className='app__container'>
+        <Card sx={{ width: '300px'}}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column'}}>
+            <Typography sx={{ padding: '20px'}} variant='h5' component='div'>Enter the OTP</Typography>
+              <TextField sx={{ width: '240px'}} variant='outlined' label='OTP ' value={otp} onChange={verifyOtp} />
+          </CardContent>
+        </Card>
+        <div id="recaptcha"></div>
+      </div>
+    )
+  }
+}
 
-export default PhoneNumberAuth;
+export default Auth
